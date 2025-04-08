@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Front Arena QA System</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+        }
+        .input-group {
+            margin-bottom: 20px;
+        }
+        textarea, button {
+            width: 100%;
+            padding: 10px;
+            margin: 5px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        .response {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+            background-color: #f9f9f9;
+        }
+        .answer {
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        .confidence {
+            font-style: italic;
+            color: #7f8c8d;
+        }
+        .error {
+            color: #e74c3c;
+        }
+        .link {
+            color: #3498db;
+            text-decoration: none;
+            word-break: break-all;
+        }
+        .link:hover {
+            text-decoration: underline;
+        }
+        #follow-ups {
+            margin-top: 15px;
+            display: none;
+        }
+        #follow-up-list {
+            list-style-type: none;
+            padding: 0;
+        }
+        #follow-up-list li:hover {
+            text-decoration: underline;
+        }
+        .did-you-mean {
+            font-style: italic;
+            margin-bottom: 10px;
+        }
+        .suggested-question {
+            color: #3498db;
+            cursor: pointer;
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Front Arena Documentation QA System</h1>
+        
+        <div class="input-group">
+            <label for="question">Ask your question:</label>
+            <textarea id="question" rows="3" placeholder="e.g. What are the network requirements for Front Arena?"></textarea>
+            <button onclick="askQuestion()">Get Answer</button>
+        </div>
+        
+        <div id="response" class="response" style="display: none;">
+            <div id="answer" class="answer"></div>
+            <div id="confidence" class="confidence"></div>
+            <div id="did-you-mean" class="did-you-mean" style="display: none;">
+                Did you mean: <span id="suggested-question" class="suggested-question"></span>?
+            </div>
+        </div>
+        
+        <div id="follow-ups">
+            <p>Related questions you might ask:</p>
+            <ul id="follow-up-list"></ul>
+        </div>
+        
+        <div id="error" class="error" style="display: none;"></div>
+    </div>
+
+    <script>
+        async function askQuestion() {
+            const question = document.getElementById('question').value.trim();
+            if (!question) {
+                showError("Please enter a question");
+                return;
+            }
+            
+            try {
+                const response = await fetch('http://127.0.0.1:5000/ask', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ question: question })
+                });
+                
+                const data = await response.json();
+                
+                if (data.status === "error") {
+                    showError(data.message || "An error occurred");
+                    return;
+                }
+                
+                displayResponse(data);
+                
+            } catch (error) {
+                showError("Failed to connect to the QA service. Make sure the backend is running.");
+                console.error(error);
+            }
+        }
+        
+        function displayResponse(data) {
+            document.getElementById('error').style.display = 'none';
+            const responseDiv = document.getElementById('response');
+            const answerDiv = document.getElementById('answer');
+            const confidenceDiv = document.getElementById('confidence');
+            const didYouMeanDiv = document.getElementById('did-you-mean');
+            const suggestedQuestionSpan = document.getElementById('suggested-question');
+            
+            responseDiv.style.display = 'block';
+            didYouMeanDiv.style.display = 'none';
+            
+            // Handle different response types
+            if (data.status === "sentiment") {
+                answerDiv.textContent = data.answer;
+                confidenceDiv.textContent = "";
+            } 
+            else if (data.status === "did_you_mean") {
+                answerDiv.innerHTML = data.answer.startsWith('http') 
+                    ? `<a href="${data.answer}" class="link" target="_blank">${data.answer}</a>`
+                    : data.answer;
+                didYouMeanDiv.style.display = 'block';
+                suggestedQuestionSpan.textContent = data.suggested_question;
+                suggestedQuestionSpan.onclick = () => {
+                    document.getElementById('question').value = data.suggested_question;
+                    askQuestion();
+                };
+                if (data.confidence) {
+                    confidenceDiv.textContent = `Confidence: ${(data.confidence * 100).toFixed(1)}%`;
+                }
+            }
+            else if (data.status === "not_found") {
+                answerDiv.textContent = data.answer;
+                confidenceDiv.textContent = "";
+            } 
+            else {
+                // Make URLs clickable
+                if (data.answer.startsWith('http')) {
+                    answerDiv.innerHTML = `<a href="${data.answer}" class="link" target="_blank">${data.answer}</a>`;
+                } else {
+                    answerDiv.textContent = data.answer;
+                }
+                if (data.confidence) {
+                    confidenceDiv.textContent = `Confidence: ${(data.confidence * 100).toFixed(1)}%`;
+                }
+            }
+            
+            // Show follow-up questions if available
+            const followUpDiv = document.getElementById('follow-ups');
+            const followUpList = document.getElementById('follow-up-list');
+            
+            if (data.follow_ups && data.follow_ups.length > 0) {
+                followUpList.innerHTML = '';
+                data.follow_ups.forEach(question => {
+                    const li = document.createElement('li');
+                    li.style.cursor = 'pointer';
+                    li.style.margin = '5px 0';
+                    li.style.color = '#3498db';
+                    li.textContent = question;
+                    li.onclick = () => {
+                        document.getElementById('question').value = question;
+                        askQuestion();
+                    };
+                    followUpList.appendChild(li);
+                });
+                followUpDiv.style.display = 'block';
+            } else {
+                followUpDiv.style.display = 'none';
+            }
+        }
+        
+        function showError(message) {
+            document.getElementById('response').style.display = 'none';
+            document.getElementById('follow-ups').style.display = 'none';
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+        }
+    </script>
+</body>
+</html>
