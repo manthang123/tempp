@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Front Arena QA System</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+        }
+        .input-group {
+            margin-bottom: 20px;
+        }
+        textarea, button {
+            width: 100%;
+            padding: 10px;
+            margin: 5px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        .response {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+            background-color: #f9f9f9;
+        }
+        .answer {
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        .confidence {
+            font-style: italic;
+            color: #7f8c8d;
+        }
+        .error {
+            color: #e74c3c;
+        }
+        .link {
+            color: #3498db;
+            text-decoration: none;
+            word-break: break-all;
+        }
+        .link:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Front Arena Documentation QA System</h1>
+        
+        <div class="input-group">
+            <label for="question">Ask your question:</label>
+            <textarea id="question" rows="3" placeholder="e.g. What are the network requirements for Front Arena?"></textarea>
+            <button onclick="askQuestion()">Get Answer</button>
+        </div>
+        
+        <div id="response" class="response" style="display: none;">
+            <div id="answer" class="answer"></div>
+            <div id="confidence" class="confidence"></div>
+        </div>
+        
+        <div id="error" class="error" style="display: none;"></div>
+    </div>
+
+    <script>
+        async function askQuestion() {
+            const question = document.getElementById('question').value.trim();
+            if (!question) {
+                showError("Please enter a question");
+                return;
+            }
+            
+            try {
+                const response = await fetch('http://127.0.0.1:5000/ask', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ question: question })
+                });
+                
+                const data = await response.json();
+                
+                if (data.status === "error") {
+                    showError(data.message || "An error occurred");
+                    return;
+                }
+                
+                displayResponse(data);
+                
+            } catch (error) {
+                showError("Failed to connect to the QA service. Make sure the backend is running.");
+                console.error(error);
+            }
+        }
+        
+        function displayResponse(data) {
+            document.getElementById('error').style.display = 'none';
+            const responseDiv = document.getElementById('response');
+            const answerDiv = document.getElementById('answer');
+            const confidenceDiv = document.getElementById('confidence');
+            
+            responseDiv.style.display = 'block';
+            
+            if (data.status === "not_found") {
+                answerDiv.textContent = data.answer;
+                confidenceDiv.textContent = "";
+            } else {
+                // Make URLs clickable
+                if (data.answer.startsWith('http')) {
+                    answerDiv.innerHTML = `<a href="${data.answer}" class="link" target="_blank">${data.answer}</a>`;
+                } else {
+                    answerDiv.textContent = data.answer;
+                }
+                confidenceDiv.textContent = `Confidence: ${(data.confidence * 100).toFixed(1)}%`;
+            }
+        }
+        
+        function showError(message) {
+            document.getElementById('response').style.display = 'none';
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+        }
+    </script>
+</body>
+</html>
