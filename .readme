@@ -1,0 +1,2 @@
+pip install pandas scikit-learn flask flask-cors textblob fuzzywuzzy python-Levenshtein
+python -m textblob.download_corpora
